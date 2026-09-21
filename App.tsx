@@ -135,6 +135,14 @@ const today = new Intl.DateTimeFormat('en-ZA', {
   year: 'numeric',
 });
 
+function formatConsentTimestamp(date = new Date()) {
+  return `${today.format(date)}, ${new Intl.DateTimeFormat('en-ZA', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)}`;
+}
+
 export default function App() {
   const [leads, setLeads] = useState(initialLeads);
   const [activeFilter, setActiveFilter] = useState<'All' | LeadStatus>('All');
@@ -185,7 +193,7 @@ export default function App() {
       const source = new URL(sourceUrl.trim());
       if (!['http:', 'https:'].includes(source.protocol)) throw new Error('Unsupported URL');
     } catch {
-      setNotice('Enter a valid HTTPS source URL, for example https://dealer.example/leads.');
+      setNotice('Enter a valid HTTP or HTTPS source URL, for example https://dealer.example/leads.');
       return;
     }
     if (!consented) {
@@ -202,7 +210,7 @@ export default function App() {
         source: 'Partner dealership forms',
         sourceUrl: sourceUrl.trim(),
         contact: contact.trim(),
-        consentAt: `${today}, now`,
+        consentAt: formatConsentTimestamp(),
         callbackDate: callbackDate.trim(),
         status: 'New',
         emailOptIn,
@@ -274,7 +282,11 @@ export default function App() {
             <Text style={styles.title}>Lead desk</Text>
             <Text style={styles.subtitle}>A consent-first pipeline for South African dealerships.</Text>
           </View>
-          <View style={styles.headerBadge} accessibilityLabel={isOnline ? 'Connection online' : 'Connection offline'}>
+          <View
+            style={styles.headerBadge}
+            accessibilityRole="text"
+            accessibilityLabel={isOnline ? 'Connection online' : 'Connection offline'}
+          >
             <View style={[styles.liveDot, !isOnline && styles.liveDotOffline]} />
             <Text style={styles.headerBadgeText}>{isOnline ? 'ONLINE' : 'OFFLINE'}</Text>
           </View>
@@ -442,7 +454,17 @@ export default function App() {
                   accessibilityLabel={label as string}
                   autoCapitalize={label === 'Contact detail' || label === 'Source URL' ? 'none' : 'words'}
                   autoCorrect={label !== 'Contact detail' && label !== 'Source URL'}
-                  keyboardType={label === 'Contact detail' ? 'email-address' : label === 'Source URL' ? 'url' : 'default'}
+                  keyboardType={label === 'Source URL' ? 'url' : 'default'}
+                  autoComplete={
+                    label === 'Full name'
+                      ? 'name'
+                      : 'off'
+                  }
+                  textContentType={
+                    label === 'Full name'
+                      ? 'name'
+                      : 'none'
+                  }
                 />
               </View>
             ))}
@@ -465,8 +487,12 @@ export default function App() {
           <Text style={styles.footerText}>No crawler bypasses. No unsolicited email. Keep source URLs, consent timestamps, retention rules and unsubscribe history with each record.</Text>
         </View>
 
-        <Modal visible={showAgent} animationType="slide" onRequestClose={() => setShowAgent(false)}>
-          <SafeAreaView style={styles.agentModal}>
+        <Modal
+          visible={showAgent}
+          animationType="slide"
+          onRequestClose={() => setShowAgent(false)}
+        >
+          <SafeAreaView style={styles.agentModal} accessibilityViewIsModal>
             <View style={styles.agentModalHeader}>
               <View>
                 <Text style={styles.agentModalTitle}>Notification assistant</Text>
