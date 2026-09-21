@@ -1,5 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Linking,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -127,7 +129,7 @@ const initialLeads: Lead[] = [
   },
 ];
 
-const today = new Date().toLocaleDateString('en-ZA', {
+const today = new Intl.DateTimeFormat('en-ZA', {
   day: '2-digit',
   month: 'short',
   year: 'numeric',
@@ -147,6 +149,27 @@ export default function App() {
   const [emailOptIn, setEmailOptIn] = useState(false);
   const [notice, setNotice] = useState('');
   const [showAgent, setShowAgent] = useState(false);
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [agentError, setAgentError] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    const browserNavigator = typeof navigator !== 'undefined' ? navigator : undefined;
+    if (browserNavigator && typeof browserNavigator.onLine === 'boolean') {
+      setIsOnline(browserNavigator.onLine);
+    }
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    if (browserNavigator?.addEventListener) {
+      browserNavigator.addEventListener('online', handleOnline);
+      browserNavigator.addEventListener('offline', handleOffline);
+      return () => {
+        browserNavigator.removeEventListener('online', handleOnline);
+        browserNavigator.removeEventListener('offline', handleOffline);
+      };
+    }
+    return undefined;
+  }, []);
 
   const filteredLeads = useMemo(
     () => (activeFilter === 'All' ? leads : leads.filter((lead) => lead.status === activeFilter)),
@@ -158,6 +181,13 @@ export default function App() {
       setNotice('Complete every field before saving the lead.');
       return;
     }
+    try {
+      const source = new URL(sourceUrl.trim());
+      if (!['http:', 'https:'].includes(source.protocol)) throw new Error('Unsupported URL');
+    } catch {
+      setNotice('Enter a valid HTTPS source URL, for example https://dealer.example/leads.');
+      return;
+    }
     if (!consented) {
       setNotice('Consent is required before contact details can be stored.');
       return;
@@ -165,7 +195,7 @@ export default function App() {
 
     setLeads((current) => [
       {
-        id: `SA-${1050 + current.length}`,
+        id: `SA-${1050 + Math.max(0, ...current.map((lead) => Number(lead.id.replace('SA-', '')) || 0)) - 1049}`,
         name: name.trim(),
         dealership: dealership.trim(),
         vehicle: vehicle.trim(),
@@ -212,6 +242,28 @@ export default function App() {
     setNotice(`Reminder scheduled for ${lead.callbackDate}. Review the invite before sending.`);
   };
 
+  const openSource = async (sourceUrl: string) => {
+    try {
+      if (!(await Linking.canOpenURL(sourceUrl))) {
+        setNotice('This source link is not available on the current device.');
+        return;
+      }
+      await Linking.openURL(sourceUrl);
+    } catch {
+      setNotice('The source link could not be opened. Check the URL and try again.');
+    }
+  };
+
+  const openAgent = () => {
+    if (!isOnline) {
+      setNotice('You are offline. Reconnect before opening the notification assistant.');
+      return;
+    }
+    setAgentError(false);
+    setAgentLoading(true);
+    setShowAgent(true);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" />
@@ -222,13 +274,20 @@ export default function App() {
             <Text style={styles.title}>Lead desk</Text>
             <Text style={styles.subtitle}>A consent-first pipeline for South African dealerships.</Text>
           </View>
-          <View style={styles.headerBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.headerBadgeText}>LIVE</Text>
+          <View style={styles.headerBadge} accessibilityLabel={isOnline ? 'Connection online' : 'Connection offline'}>
+            <View style={[styles.liveDot, !isOnline && styles.liveDotOffline]} />
+            <Text style={styles.headerBadgeText}>{isOnline ? 'ONLINE' : 'OFFLINE'}</Text>
           </View>
         </View>
 
-        <TouchableOpacity style={styles.agentBanner} onPress={() => setShowAgent(true)}>
+        {!isOnline ? (
+          <View style={styles.offlineBanner} accessibilityLiveRegion="polite">
+            <Ionicons name="cloud-offline-outline" size={18} color="#FDBA74" />
+            <Text style={styles.offlineText}>You’re offline. Saved lead work remains available; connected tools are paused.</Text>
+          </View>
+        ) : null}
+
+        <TouchableOpacity style={styles.agentBanner} onPress={openAgent} accessibilityRole="button" accessibilityLabel="Open notification assistant" accessibilityHint="Opens the connected Copilot Studio assistant">
           <View style={styles.agentIcon}>
             <Ionicons name="sparkles-outline" size={20} color="#A5F3FC" />
           </View>
@@ -245,7 +304,7 @@ export default function App() {
             <Text style={styles.heroText}>
               Use documented sources, partner permissions and approved APIs. Every contact stays traceable from source to callback.
             </Text>
-            <TouchableOpacity style={styles.primaryButton} onPress={() => setShowIntake(true)}>
+            <TouchableOpacity style={styles.primaryButton} onPress={() => setShowIntake(true)} accessibilityRole="button" accessibilityLabel="Add consented lead">
               <Ionicons name="add" size={20} color="#06131F" />
               <Text style={styles.primaryButtonText}>Add consented lead</Text>
             </TouchableOpacity>
@@ -259,7 +318,7 @@ export default function App() {
         </View>
 
         {notice ? (
-          <TouchableOpacity style={styles.notice} onPress={() => setNotice('')}>
+          <TouchableOpacity style={styles.notice} onPress={() => setNotice('')} accessibilityLiveRegion="polite" accessibilityRole="alert">
             <Ionicons name="information-circle-outline" size={19} color="#67E8F9" />
             <Text style={styles.noticeText}>{notice}</Text>
             <Ionicons name="close" size={18} color="#94A3B8" />
@@ -306,7 +365,7 @@ export default function App() {
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
           {(['All', 'New', 'Callback due', 'Contacted'] as const).map((filter) => (
-            <TouchableOpacity key={filter} style={[styles.filter, activeFilter === filter && styles.filterActive]} onPress={() => setActiveFilter(filter)}>
+            <TouchableOpacity key={filter} style={[styles.filter, activeFilter === filter && styles.filterActive]} onPress={() => setActiveFilter(filter)} accessibilityRole="button" accessibilityState={{ selected: activeFilter === filter }}>
               <Text style={[styles.filterText, activeFilter === filter && styles.filterTextActive]}>{filter}</Text>
             </TouchableOpacity>
           ))}
@@ -325,23 +384,29 @@ export default function App() {
             <View style={styles.leadDetails}>
               <View><Text style={styles.detailLabel}>INTEREST</Text><Text style={styles.detailValue}>{lead.vehicle}</Text></View>
               <View><Text style={styles.detailLabel}>CALLBACK</Text><Text style={styles.detailValue}>{lead.callbackDate}</Text></View>
-              <View><Text style={styles.detailLabel}>SOURCE</Text><Text style={styles.detailValue}>{lead.source}</Text><Text style={styles.sourceUrl}>{lead.sourceUrl}</Text></View>
+              <View>
+                <Text style={styles.detailLabel}>SOURCE</Text>
+                <Text style={styles.detailValue}>{lead.source}</Text>
+                <TouchableOpacity onPress={() => openSource(lead.sourceUrl)} accessibilityRole="link" accessibilityLabel={`Open source for ${lead.name}`}>
+                  <Text style={styles.sourceUrl}>{lead.sourceUrl}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
             <View style={styles.leadActions}>
               <Text style={styles.consentText}><Ionicons name="checkmark-circle" size={15} color="#86EFAC" /> Consent logged {lead.consentAt}</Text>
               <View style={styles.actionButtons}>
                 {lead.emailOptIn ? (
-                  <TouchableOpacity style={styles.secondaryButton} onPress={() => requestEmail(lead)}>
+                  <TouchableOpacity style={styles.secondaryButton} onPress={() => requestEmail(lead)} accessibilityRole="button" accessibilityLabel={`Draft email for ${lead.name}`}>
                     <Ionicons name="mail-outline" size={16} color="#CBD5E1" /><Text style={styles.secondaryButtonText}>Draft email</Text>
                   </TouchableOpacity>
                 ) : null}
                 {lead.emailOptIn ? (
-                  <TouchableOpacity style={styles.secondaryButton} onPress={() => scheduleReminder(lead)}>
+                  <TouchableOpacity style={styles.secondaryButton} onPress={() => scheduleReminder(lead)} accessibilityRole="button" accessibilityLabel={`Schedule reminder for ${lead.name}`}>
                     <Ionicons name="calendar-outline" size={16} color="#CBD5E1" /><Text style={styles.secondaryButtonText}>Reminder</Text>
                   </TouchableOpacity>
                 ) : null}
                 {lead.status !== 'Contacted' ? (
-                  <TouchableOpacity style={styles.smallPrimary} onPress={() => markContacted(lead.id)}>
+                  <TouchableOpacity style={styles.smallPrimary} onPress={() => markContacted(lead.id)} accessibilityRole="button" accessibilityLabel={`Mark ${lead.name} contacted`}>
                     <Text style={styles.smallPrimaryText}>Mark contacted</Text>
                   </TouchableOpacity>
                 ) : null}
@@ -354,7 +419,9 @@ export default function App() {
           <View style={styles.intake}>
             <View style={styles.intakeHeader}>
               <View><Text style={styles.intakeTitle}>Capture a consented lead</Text><Text style={styles.intakeHint}>No consent, no contact record.</Text></View>
-              <TouchableOpacity onPress={() => setShowIntake(false)}><Ionicons name="close" size={24} color="#CBD5E1" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowIntake(false)} accessibilityRole="button" accessibilityLabel="Close lead form">
+                <Ionicons name="close" size={24} color="#CBD5E1" />
+              </TouchableOpacity>
             </View>
             {[
               ['Full name', name, setName, 'e.g. Ayanda Khumalo'],
@@ -366,18 +433,28 @@ export default function App() {
             ].map(([label, value, setter, placeholder]) => (
               <View key={label as string} style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>{label as string}</Text>
-                <TextInput style={styles.input} value={value as string} onChangeText={setter as (value: string) => void} placeholder={placeholder as string} placeholderTextColor="#64748B" />
+                <TextInput
+                  style={styles.input}
+                  value={value as string}
+                  onChangeText={setter as (value: string) => void}
+                  placeholder={`${placeholder as string}…`}
+                  placeholderTextColor="#64748B"
+                  accessibilityLabel={label as string}
+                  autoCapitalize={label === 'Contact detail' || label === 'Source URL' ? 'none' : 'words'}
+                  autoCorrect={label !== 'Contact detail' && label !== 'Source URL'}
+                  keyboardType={label === 'Contact detail' ? 'email-address' : label === 'Source URL' ? 'url' : 'default'}
+                />
               </View>
             ))}
             <View style={styles.toggleRow}>
               <View style={styles.toggleCopy}><Text style={styles.toggleTitle}>Consent to store and contact</Text><Text style={styles.toggleHint}>Required. Record the source URL and timestamp in production.</Text></View>
-              <Switch value={consented} onValueChange={setConsented} trackColor={{ false: '#334155', true: '#0E7490' }} thumbColor={consented ? '#67E8F9' : '#CBD5E1'} />
+              <Switch value={consented} onValueChange={setConsented} accessibilityLabel="Consent to store and contact" trackColor={{ false: '#334155', true: '#0E7490' }} thumbColor={consented ? '#67E8F9' : '#CBD5E1'} />
             </View>
             <View style={styles.toggleRow}>
               <View style={styles.toggleCopy}><Text style={styles.toggleTitle}>Email opt-in</Text><Text style={styles.toggleHint}>Only opted-in contacts can receive email drafts or reminders.</Text></View>
-              <Switch value={emailOptIn} onValueChange={setEmailOptIn} trackColor={{ false: '#334155', true: '#0E7490' }} thumbColor={emailOptIn ? '#67E8F9' : '#CBD5E1'} />
+              <Switch value={emailOptIn} onValueChange={setEmailOptIn} accessibilityLabel="Email opt-in" trackColor={{ false: '#334155', true: '#0E7490' }} thumbColor={emailOptIn ? '#67E8F9' : '#CBD5E1'} />
             </View>
-            <TouchableOpacity style={[styles.primaryButton, !consented && styles.primaryButtonDisabled]} onPress={addLead}>
+            <TouchableOpacity style={[styles.primaryButton, !consented && styles.primaryButtonDisabled]} onPress={addLead} accessibilityRole="button" accessibilityLabel="Save lead securely">
               <Ionicons name="save-outline" size={18} color="#06131F" /><Text style={styles.primaryButtonText}>Save lead securely</Text>
             </TouchableOpacity>
           </View>
@@ -395,19 +472,37 @@ export default function App() {
                 <Text style={styles.agentModalTitle}>Notification assistant</Text>
                 <Text style={styles.agentModalHint}>Copilot Studio · Microsoft Teams</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowAgent(false)} style={styles.closeAgent}>
+              <TouchableOpacity onPress={() => setShowAgent(false)} style={styles.closeAgent} accessibilityRole="button" accessibilityLabel="Close notification assistant">
                 <Ionicons name="close" size={24} color="#CBD5E1" />
               </TouchableOpacity>
             </View>
-            <WebView
+            {agentError ? (
+              <View style={styles.agentError}>
+                <Ionicons name="cloud-offline-outline" size={34} color="#FDBA74" />
+                <Text style={styles.agentErrorTitle}>Assistant unavailable</Text>
+                <Text style={styles.agentErrorText}>Check your connection or Microsoft Teams sign-in, then try again.</Text>
+                <TouchableOpacity style={styles.primaryButton} onPress={openAgent} accessibilityRole="button" accessibilityLabel="Retry assistant connection">
+                  <Text style={styles.primaryButtonText}>Try again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            {!agentError ? <WebView
               source={{ uri: COPILOT_STUDIO_AGENT_URL }}
               startInLoadingState
               javaScriptEnabled
               domStorageEnabled
               sharedCookiesEnabled
               thirdPartyCookiesEnabled
-              onError={() => setNotice('The Teams agent could not be loaded. Sign in to Microsoft Teams and try again.')}
-            />
+              onLoadStart={() => { setAgentLoading(true); setAgentError(false); }}
+              onLoadEnd={() => setAgentLoading(false)}
+              onError={() => { setAgentLoading(false); setAgentError(true); }}
+            /> : null}
+            {agentLoading ? (
+              <View style={styles.agentLoading} pointerEvents="none">
+                <ActivityIndicator size="large" color="#67E8F9" />
+                <Text style={styles.agentLoadingText}>Loading assistant…</Text>
+              </View>
+            ) : null}
           </SafeAreaView>
         </Modal>
       </ScrollView>
@@ -424,7 +519,10 @@ const styles = StyleSheet.create({
   subtitle: { color: '#94A3B8', fontSize: 14, marginTop: 6, maxWidth: 275, lineHeight: 20 },
   headerBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#1E4052', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 7 },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#4ADE80' },
+  liveDotOffline: { backgroundColor: '#FB923C' },
   headerBadgeText: { color: '#86EFAC', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  offlineBanner: { backgroundColor: '#3B291E', borderWidth: 1, borderColor: '#754C2D', borderRadius: 10, padding: 11, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  offlineText: { color: '#FED7AA', flex: 1, fontSize: 12, lineHeight: 17 },
   hero: { backgroundColor: '#0D2433', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#1A4355', flexDirection: 'row', marginBottom: 16 },
   heroCopy: { flex: 1, paddingRight: 12 },
   heroTitle: { color: '#F8FAFC', fontSize: 24, fontWeight: '800', lineHeight: 29, letterSpacing: -0.5 },
@@ -505,4 +603,9 @@ const styles = StyleSheet.create({
   agentModalTitle: { color: '#F8FAFC', fontSize: 17, fontWeight: '800' },
   agentModalHint: { color: '#7F94A5', fontSize: 11, marginTop: 3 },
   closeAgent: { padding: 6 },
+  agentLoading: { ...StyleSheet.absoluteFillObject, top: 64, backgroundColor: '#07111F', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  agentLoadingText: { color: '#CBD5E1', fontSize: 13 },
+  agentError: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 12 },
+  agentErrorTitle: { color: '#F8FAFC', fontSize: 20, fontWeight: '800' },
+  agentErrorText: { color: '#94A3B8', fontSize: 13, lineHeight: 19, textAlign: 'center', marginBottom: 8 },
 });
