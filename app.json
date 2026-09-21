@@ -1,31 +1,27 @@
 {
   "expo": {
-    "name": "a0-project",
-    "slug": "snack-12a00a3b-4296-44f1-9dc7-78199a8877fa",
+    "name": "Hyundai Kia Service Hub",
+    "slug": "hyundai-kia-service-hub",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#08111f"
     },
-    "ios": {
-      "supportsTablet": true
-    },
+    "ios": { "supportsTablet": true },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./adaptive-icon.png",
+        "backgroundColor": "#08111f"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "description": "Quickly generate React Native components with AI"
+    "web": { "favicon": "./favicon.png" },
+    "plugins": ["expo-notifications"]
   }
 }
