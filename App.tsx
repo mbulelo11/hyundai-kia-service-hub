@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Linking,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -152,6 +154,7 @@ export default function App() {
   const [vehicle, setVehicle] = useState('');
   const [dealership, setDealership] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
+  const [leadSource, setLeadSource] = useState(sources[0].name);
   const [callbackDate, setCallbackDate] = useState('');
   const [consented, setConsented] = useState(false);
   const [emailOptIn, setEmailOptIn] = useState(false);
@@ -207,7 +210,7 @@ export default function App() {
         name: name.trim(),
         dealership: dealership.trim(),
         vehicle: vehicle.trim(),
-        source: 'Partner dealership forms',
+        source: leadSource,
         sourceUrl: sourceUrl.trim(),
         contact: contact.trim(),
         consentAt: formatConsentTimestamp(),
@@ -222,6 +225,7 @@ export default function App() {
     setVehicle('');
     setDealership('');
     setSourceUrl('');
+    setLeadSource(sources[0].name);
     setCallbackDate('');
     setConsented(false);
     setEmailOptIn(false);
@@ -275,7 +279,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" />
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <View>
             <Text style={styles.brand}>SERVICE HUB</Text>
@@ -428,7 +432,11 @@ export default function App() {
         ))}
 
         {showIntake ? (
-          <View style={styles.intake}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}
+            style={styles.intake}
+          >
             <View style={styles.intakeHeader}>
               <View><Text style={styles.intakeTitle}>Capture a consented lead</Text><Text style={styles.intakeHint}>No consent, no contact record.</Text></View>
               <TouchableOpacity onPress={() => setShowIntake(false)} accessibilityRole="button" accessibilityLabel="Close lead form">
@@ -468,6 +476,28 @@ export default function App() {
                 />
               </View>
             ))}
+            <Text style={styles.inputLabel}>Lead source</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.sourcePickerRow}
+              keyboardShouldPersistTaps="handled"
+            >
+              {sources.map((source) => (
+                <TouchableOpacity
+                  key={source.name}
+                  style={[styles.sourcePicker, leadSource === source.name && styles.sourcePickerActive]}
+                  onPress={() => setLeadSource(source.name)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: leadSource === source.name }}
+                  accessibilityLabel={`Lead source: ${source.name}`}
+                >
+                  <Text style={[styles.sourcePickerText, leadSource === source.name && styles.sourcePickerTextActive]}>
+                    {source.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
             <View style={styles.toggleRow}>
               <View style={styles.toggleCopy}><Text style={styles.toggleTitle}>Consent to store and contact</Text><Text style={styles.toggleHint}>Required. Record the source URL and timestamp in production.</Text></View>
               <Switch value={consented} onValueChange={setConsented} accessibilityLabel="Consent to store and contact" trackColor={{ false: '#334155', true: '#0E7490' }} thumbColor={consented ? '#67E8F9' : '#CBD5E1'} />
@@ -479,7 +509,7 @@ export default function App() {
             <TouchableOpacity style={[styles.primaryButton, !consented && styles.primaryButtonDisabled]} onPress={addLead} accessibilityRole="button" accessibilityLabel="Save lead securely">
               <Ionicons name="save-outline" size={18} color="#06131F" /><Text style={styles.primaryButtonText}>Save lead securely</Text>
             </TouchableOpacity>
-          </View>
+          </KeyboardAvoidingView>
         ) : null}
 
         <View style={styles.footerNote}>
@@ -512,17 +542,20 @@ export default function App() {
                 </TouchableOpacity>
               </View>
             ) : null}
-            {!agentError ? <WebView
-              source={{ uri: COPILOT_STUDIO_AGENT_URL }}
-              startInLoadingState
-              javaScriptEnabled
-              domStorageEnabled
-              sharedCookiesEnabled
-              thirdPartyCookiesEnabled
-              onLoadStart={() => { setAgentLoading(true); setAgentError(false); }}
-              onLoadEnd={() => setAgentLoading(false)}
-              onError={() => { setAgentLoading(false); setAgentError(true); }}
-            /> : null}
+            {!agentError ? (
+              <WebView
+                source={{ uri: COPILOT_STUDIO_AGENT_URL }}
+                startInLoadingState
+                javaScriptEnabled
+                domStorageEnabled
+                sharedCookiesEnabled
+                thirdPartyCookiesEnabled
+                onShouldStartLoadWithRequest={(request) => request.url.startsWith('https://')}
+                onLoadStart={() => { setAgentLoading(true); setAgentError(false); }}
+                onLoadEnd={() => setAgentLoading(false)}
+                onError={() => { setAgentLoading(false); setAgentError(true); }}
+              />
+            ) : null}
             {agentLoading ? (
               <View style={styles.agentLoading} pointerEvents="none">
                 <ActivityIndicator size="large" color="#67E8F9" />
@@ -613,6 +646,11 @@ const styles = StyleSheet.create({
   inputGroup: { marginBottom: 11 },
   inputLabel: { color: '#C5D7DE', fontSize: 11, fontWeight: '700', marginBottom: 6 },
   input: { backgroundColor: '#091827', borderWidth: 1, borderColor: '#294154', color: '#F8FAFC', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 10, fontSize: 13 },
+  sourcePickerRow: { gap: 8, paddingBottom: 12 },
+  sourcePicker: { borderWidth: 1, borderColor: '#294154', borderRadius: 18, paddingHorizontal: 11, paddingVertical: 8, backgroundColor: '#091827' },
+  sourcePickerActive: { borderColor: '#2C7285', backgroundColor: '#123847' },
+  sourcePickerText: { color: '#94A3B8', fontSize: 11, fontWeight: '700' },
+  sourcePickerTextActive: { color: '#A5F3FC' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#244052', paddingVertical: 12, gap: 12 },
   toggleCopy: { flex: 1 },
   toggleTitle: { color: '#E2F1F4', fontSize: 12, fontWeight: '800' },
